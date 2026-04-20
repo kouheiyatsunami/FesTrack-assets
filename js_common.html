@@ -1,0 +1,292 @@
+<script>
+// ==========================================
+// 1. グローバル変数・初期化処理
+// ==========================================
+let userName = "";
+let userRole = "";
+let appVersion = "";
+let appUrl = "";
+let currentUserInfo = null;
+let currentAppealId = null;
+
+let alertModalOnClose = null;
+let confirmDialogOnConfirm = null;
+let promptDialogOnConfirm = null;
+
+let audioCtx = null;
+let currentVideoStream = null;
+let animationFrameId = null;
+let isProcessingScan = false;
+let lastScanTime = 0;
+const SCAN_INTERVAL = 250;
+let currentScanMode = ''; 
+let zxingReader = null;
+
+// ==========================================
+// 2. GAS通信・キャッシュ系
+// ==========================================
+function runGAS(funcName, ...args) {
+    return new Promise((resolve, reject) => {
+    google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)
+        [funcName](...args);
+    });
+}
+const SWR = {
+    get: (key) => {
+    try { return JSON.parse(localStorage.getItem('swr_' + key)); } 
+    catch(e) { return null; }
+    },
+    set: (key, data) => {
+    try { localStorage.setItem('swr_' + key, JSON.stringify(data)); } 
+    catch(e) {}
+    },
+    fetch: async (key, gasFunc, args, renderCb, skeletonCb) => {
+    const cached = SWR.get(key);
+    if (cached) {
+        renderCb(cached);
+    } else if (skeletonCb) {
+        skeletonCb();
+    }
+    try {
+        const fresh = await runGAS(gasFunc, ...args);
+        if (JSON.stringify(cached) !== JSON.stringify(fresh)) {
+        SWR.set(key, fresh);
+        renderCb(fresh);
+        }
+    } catch (err) {
+        console.error(`SWR Error (${gasFunc}):`, err);
+    }
+    }
+};
+
+// ==========================================
+// 3. UIコンポーネント・モーダル系
+// ==========================================
+const SkeletonUI = {
+    table: (cols = 4, rows = 5) => {
+    let html = '<div class="table-wrapper"><table class="table" style="width:100%;"><thead><tr>';
+    for(let i=0; i<cols; i++) html += '<th><div class="skeleton-box" style="margin:0; height:15px; width:80%;"></div></th>';
+    html += '</tr></thead><tbody>';
+    for(let i=0; i<rows; i++) {
+        html += '<tr>';
+        for(let j=0; j<cols; j++) html += '<td><div class="skeleton-box" style="margin:0;"></div></td>';
+        html += '</tr>';
+    }
+    return html + '</tbody></table></div>';
+    },
+    list: (items = 3) => {
+    let html = '<div>';
+    for(let i=0; i<items; i++) {
+        html += '<div style="padding:15px; border-bottom:1px solid var(--border-color);"><div class="skeleton-box" style="width:60%;"></div><div class="skeleton-box" style="height:15px; width:40%; margin-bottom:0;"></div></div>';
+    }
+    return html + '</div>';
+    }
+};
+function showLoading(msg) {
+    document.getElementById('loading-message').textContent = msg;
+    document.getElementById('loading-overlay').style.display = 'flex';
+}
+function hideLoading() {
+    document.getElementById('loading-overlay').style.display = 'none';
+}
+function showAlert(msg, title = "通知", isSuccess = false, callback = null) {
+  document.getElementById('alert-modal-title').textContent = title;
+  document.getElementById('alert-modal-title').style.color = isSuccess ? 'green' : 'red';
+  document.getElementById('alert-modal-message').innerHTML = msg.replace(/\n/g, '<br>');
+  alertModalOnClose = callback;
+  document.getElementById('alert-modal-overlay').style.display = 'flex';
+}
+function showConfirm(title, message, onConfirm, isDanger = false) {
+    document.getElementById('confirm-modal-title').textContent = title;
+    document.getElementById('confirm-modal-message').innerHTML = message;
+    const actionBtn = document.getElementById('confirm-action-btn');
+    actionBtn.onclick = () => {
+    document.getElementById('confirm-modal-overlay').style.display = 'none';
+    if (onConfirm) onConfirm();
+    };
+    actionBtn.className = isDanger ? 'btn btn-danger' : 'btn btn-primary';
+    actionBtn.textContent = isDanger ? '実行' : 'OK';
+    document.getElementById('confirm-modal-overlay').style.display = 'flex';
+}
+function showPromptDialog(title, message, placeholder, onConfirm) {
+    document.getElementById('prompt-modal-title').textContent = title;
+    document.getElementById('prompt-modal-message').innerHTML = message;
+    const inputEl = document.getElementById('prompt-modal-input');
+    inputEl.style.display = 'block';
+    inputEl.value = '';
+    inputEl.placeholder = placeholder || '';
+    const oldConfirmBtn = document.getElementById('confirm-prompt-btn');
+    const confirmBtn = oldConfirmBtn.cloneNode(true);
+    oldConfirmBtn.parentNode.replaceChild(confirmBtn, oldConfirmBtn);
+    confirmBtn.textContent = '決定';
+    confirmBtn.onclick = () => {
+    const val = inputEl.value.trim();
+    if (!val) {
+        showAlert("入力が空です。", "エラー");
+        return;
+    }
+    document.getElementById('prompt-modal-overlay').style.display = 'none';
+    if (onConfirm) onConfirm(val);
+    };
+    document.getElementById('cancel-prompt-btn').onclick = () => {
+    document.getElementById('prompt-modal-overlay').style.display = 'none';
+    };
+    document.getElementById('prompt-modal-overlay').style.display = 'flex';
+    inputEl.focus();
+}
+function closeAlert() {
+    document.getElementById('alert-modal-overlay').style.display = 'none';
+    if(alertModalOnClose) { alertModalOnClose(); alertModalOnClose = null; }
+}
+function openModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.style.display = 'flex';
+}
+function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.style.display = 'none';
+}
+function onFailure(error) {
+  hideLoading();
+  showAlert("エラーが発生しました:\n" + error.message, "エラー");
+}
+
+// ==========================================
+// 4. 音声・カメラ制御系（基盤のみ）
+// ==========================================
+function playBeep() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    oscillator.start();
+    oscillator.stop(audioCtx.currentTime + 0.1);
+  } catch (e) {
+    console.warn("Audio Error:", e);
+  }
+}
+function playErrorBeep() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const t = audioCtx.currentTime;
+    const osc1 = audioCtx.createOscillator();
+    const gain1 = audioCtx.createGain();
+    osc1.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(200, t);
+    gain1.gain.setValueAtTime(0.1, t);
+    osc1.connect(gain1);
+    gain1.connect(audioCtx.destination);
+    osc1.start(t);
+    osc1.stop(t + 0.1);
+    const osc2 = audioCtx.createOscillator();
+    const gain2 = audioCtx.createGain();
+    osc2.type = 'sawtooth';
+    osc2.frequency.setValueAtTime(150, t + 0.15);
+    gain2.gain.setValueAtTime(0.1, t + 0.15);
+    osc2.connect(gain2);
+    gain2.connect(audioCtx.destination);
+    osc2.start(t + 0.15);
+    osc2.stop(t + 0.3);
+  } catch (e) {
+    console.warn("Audio Error:", e);
+  }
+}
+
+async function startCamera(videoId, callback) {
+  const video = document.getElementById(videoId);
+  const canvas = document.getElementById(videoId.replace('video', 'canvas'));
+  if (!video || !canvas) return;
+  if (currentScanMode === 'checkout') {
+    if (!zxingReader) zxingReader = new ZXing.BrowserMultiFormatReader();
+    try {
+      const videoInputDevices = await zxingReader.listVideoInputDevices();
+      let selectedDeviceId = undefined;
+      if (videoInputDevices.length > 0) {
+        const backCamera = videoInputDevices.find(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('背面'));
+        selectedDeviceId = backCamera ? backCamera.deviceId : videoInputDevices[0].deviceId;
+      }
+      zxingReader.decodeFromVideoDevice(selectedDeviceId, videoId, (result, err) => {
+        if (result && !isProcessingScan && callback) {
+          callback(result.getText());
+        }
+      });
+    } catch (err) {
+      console.error("ZXing Camera Error:", err);
+      showAlert("カメラを起動できませんでした。", "エラー");
+    }
+  } else {
+    try {
+      currentVideoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      video.srcObject = currentVideoStream;
+      video.setAttribute("playsinline", true);
+      await video.play();
+      requestAnimationFrame(() => tick(video, canvas, callback));
+    } catch (err) {
+      console.error("Camera Error:", err);
+      showAlert("カメラを起動できませんでした。\nブラウザの権限設定を確認してください。", "エラー");
+    }
+  }
+}
+function tick(video, canvas, callback) {
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    const now = Date.now();
+    if (now - lastScanTime < SCAN_INTERVAL) {
+      animationFrameId = requestAnimationFrame(() => tick(video, canvas, callback));
+      return;
+    }
+    lastScanTime = now;
+    canvas.height = video.videoHeight;
+    canvas.width = video.videoWidth;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+    if (code && code.data && !isProcessingScan && callback) {
+      callback(code.data);
+    }
+  }
+  animationFrameId = requestAnimationFrame(() => tick(video, canvas, callback));
+}
+function stopCamera() {
+  if (zxingReader) zxingReader.reset();
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
+  if (currentVideoStream) {
+    currentVideoStream.getTracks().forEach(track => track.stop());
+    currentVideoStream = null;
+  }
+  ['checkout-qr-video', 'return-qr-video', 'move-qr-video', 'generic-qr-video'].forEach(id => {
+    const v = document.getElementById(id);
+    if(v) { v.srcObject = null; v.load(); }
+  });
+}
+function openScanner(mode, callback) {
+  currentScanMode = mode;
+  document.getElementById('scanner-modal').style.display = 'flex';
+  startCamera('generic-qr-video', callback);
+}
+function closeScanner() {
+  stopCamera();
+  document.getElementById('scanner-modal').style.display = 'none';
+}
+// ==========================================
+// 5. その他
+// ==========================================
+function generateProjectId() {
+  const timestamp = Date.now().toString(36);
+  const randomStr = Math.random().toString(36).substring(2, 5);
+  return "P-" + timestamp + randomStr;
+}
+
+</script>

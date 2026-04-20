@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="FesTrack">
+  <link rel="apple-touch-icon" href="<?= iconData ?>">
+  <link rel="icon" href="<?= iconData ?>">
+  <title>FesTrack</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <?!= HtmlService.createHtmlOutputFromFile('css').getContent(); ?>
+</head>
+
+<style>
+  .page { max-width: 800px; }
+</style> 
+
+<body>
+  <header class="glass-header" style="flex-wrap: nowrap;"> 
+    <div id="home-icon" onclick="showPage('home-page')" style="cursor: pointer; flex-shrink: 0;">
+      <img id="logo-image" 
+           src=""
+           alt="FesTrack"
+           data-fileid="1vbj9TWjocqLJCI3i_gsIfNaHVqafUlDP">
+    </div>
+    <div id="settings-icon" style="display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0; cursor: pointer;">
+      <i class="fa-solid fa-bars" id="settings-icon-img" style="font-size: 1.6rem; color: var(--text-main); padding: 5px;"></i>
+    </div>
+  </header>
+
+  <main id="home-page" class="page">
+    <div class="glass-panel" style="text-align: center; padding: 16px;">
+        <span id="welcome-user-name" style="font-weight: 700;"></span> さん、ようこそ
+    </div>
+    <div class="glass-panel" style="padding: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+        <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-main);">
+          <i class="fa-solid fa-inbox" style="color: var(--primary); margin-right: 8px;"></i>受信ボックス
+        </h3>
+        <button class="btn btn-secondary" onclick="showPage('inbox-page')" style="padding: 6px 12px; font-size: 0.85rem;">
+          全て表示
+        </button>
+      </div>
+      <div id="home-inbox-list" style="max-height: 200px; overflow-y: auto;">
+        <p style="text-align: center; color: var(--text-sub); font-size: 0.9rem; margin: 0;">読み込み中...</p>
+      </div>
+    </div>
+    <div class="home-grid">
+      <button id="btn-checkout" onclick="showPage('checkout-page')">
+        <i class="fa-solid fa-qrcode" style="font-size: 2rem; margin-bottom: 5px;"></i>
+        <span>貸出</span>
+      </button>
+      <button id="btn-return" onclick="showPage('return-page')">
+        <i class="fa-solid fa-box-open" style="font-size: 2rem; margin-bottom: 5px;"></i>
+        <span>返却</span>
+      </button>
+      <button id="btn-move" onclick="showPage('move-page')">
+        <i class="fa-solid fa-dolly" style="font-size: 2rem; margin-bottom: 5px;"></i>
+        <span>移動</span>
+      </button>
+      <button id="btn-reserve" onclick="showPage('reserve-menu-page')">
+        <i class="fa-regular fa-calendar-check" style="font-size: 2rem; margin-bottom: 5px;"></i>
+        <span>予約</span>
+      </button>
+    </div>
+  </main>
+
+  <main id="checkout-page" class="page">
+    <h2>備品貸出</h2>
+    <div class="scan-tabs">
+      <button class="scan-tab-btn active" onclick="switchScanTab('checkout', 'qr')">QR</button>
+      <button class="scan-tab-btn" onclick="switchScanTab('checkout', 'manual')">手動</button>
+    </div>
+    <div id="checkout-tab-qr" class="scan-tab-content active">
+      <div class="scanner-container">
+        <video id="checkout-qr-video" class="qr-video-element" playsinline></video>
+        <canvas id="checkout-qr-canvas" style="display: none;"></canvas>
+      </div>
+    </div>
+    <div id="checkout-tab-manual" class="scan-tab-content">
+      <p style="font-size: 0.9rem; color: var(--text-sub); margin-bottom: 5px;">QRタグが読み取れない場合は、タグID（例: 26-A-000）を直接入力してください。</p>
+      <div class="manual-input-container">
+        <input type="text" id="checkout-manual-id" placeholder="備品IDを入力" onkeydown="if(event.key === 'Enter') submitManualInput('checkout-manual-id')">
+        <button class="btn btn-primary" onclick="submitManualInput('checkout-manual-id')">追加</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="checkout-org-name">貸出先:</label>
+      <select id="checkout-org-name" class="input-field">
+        <option value="">（団体名を読み込み中...）</option>
+      </select>
+    </div>
+    <p>QRコードを連続でスキャンしてください</p>
+    <p id="scan-feedback" style="font-weight: bold; color: var(--danger);"></p>
+    <div class="glass-panel" style="padding: 16px;">
+      <strong style="display:block; margin-bottom: 10px;">スキャン済みリスト：</strong>
+      <ul id="checkout-list">
+        <li>（まだスキャンされていません）</li>
+      </ul>
+    </div>
+    <div class="glass-footer">
+      <button id="checkout-execute-btn" class="btn btn-primary" style="flex: 1;" disabled>
+        <span id="checkout-count">0</span>件の備品を貸出
+      </button>
+    </div>
+  </main>
+
+  <main id="return-page" class="page">
+    <h2>備品返却</h2> 
+    <div class="scan-tabs">
+      <button class="scan-tab-btn active" onclick="switchScanTab('return', 'qr')">QR</button>
+      <button class="scan-tab-btn" onclick="switchScanTab('return', 'manual')">手動</button>
+    </div>
+    <div id="return-tab-qr" class="scan-tab-content active">
+      <div class="scanner-container">
+        <video id="return-qr-video" class="qr-video-element" playsinline></video>
+        <canvas id="return-qr-canvas" style="display: none;"></canvas>
+      </div>
+    </div>
+    <div id="return-tab-manual" class="scan-tab-content">
+      <p style="font-size: 0.9rem; color: var(--text-sub); margin-bottom: 5px;">QRタグが読み取れない場合は、タグID（例: 26-A-000）を直接入力してください。</p>
+      <div class="manual-input-container">
+        <input type="text" id="return-manual-id" placeholder="備品IDを入力" onkeydown="if(event.key === 'Enter') submitManualInput('return-manual-id')">
+        <button class="btn btn-primary" onclick="submitManualInput('return-manual-id')">追加</button>
+      </div>
+    </div>
+    <p>QRコードを連続でスキャンしてください</p>
+    <div class="glass-panel" style="padding: 16px;">
+      <strong style="display:block; margin-bottom: 10px;">スキャン済みリスト：</strong>
+      <ul id="return-list"> 
+        <li>（まだスキャンされていません）</li>
+      </ul>
+    </div>
+    <div class="glass-footer">
+      <button id="return-execute-btn" class="btn btn-primary" style="flex: 1;" disabled>
+        <span id="return-count">0</span>件の備品を返却
+      </button>
+    </div>
+  </main>
+
+  <main id="move-page" class="page">
+    <h2>備品移動</h2>
+    <div class="scan-tabs">
+      <button class="scan-tab-btn active" onclick="switchScanTab('move', 'qr')">QR</button>
+      <button class="scan-tab-btn" onclick="switchScanTab('move', 'manual')">手動</button>
+    </div>
+    <div id="move-tab-qr" class="scan-tab-content active">
+      <div class="scanner-container">
+        <video id="move-qr-video" class="qr-video-element" playsinline></video>
+        <canvas id="move-qr-canvas" style="display: none;"></canvas>
+      </div>
+    </div>
+    <div id="move-tab-manual" class="scan-tab-content">
+      <p style="font-size: 0.9rem; color: var(--text-sub); margin-bottom: 5px;">QRタグが読み取れない場合は、タグID（例: 26-A-000）を直接入力してください。</p>
+      <div class="manual-input-container">
+        <input type="text" id="move-manual-id" placeholder="備品IDを入力" onkeydown="if(event.key === 'Enter') submitManualInput('move-manual-id')">
+        <button class="btn btn-primary" onclick="submitManualInput('move-manual-id')">追加</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="move-location">移動先</label>
+      <select id="move-location" class="input-field">
+        <option value="">（読み込み中...）</option>
+      </select>
+    </div>
+    <p>QRコードを連続でスキャンしてください</p>
+    <div class="glass-panel" style="padding: 16px;">
+      <strong style="display:block; margin-bottom: 10px;">スキャン済みリスト：</strong>
+      <ul id="move-list">
+        <li>（まだスキャンされていません）</li>
+      </ul>
+    </div>
+    <div class="glass-footer">
+      <button id="move-execute-btn" class="btn btn-primary" style="flex: 1;" disabled>
+        <span id="move-count">0</span>件の備品を移動
+      </button>
+    </div>
+  </main>
+
+  <main id="reserve-menu-page" class="page">
+    <h2>備品予約</h2>
+    <div class="vertical-menu-container">
+      <button id="btn-new-reserve" class="vertical-menu-btn" onclick="showPage('reserve-page')">新規予約</button>
+      <button id="btn-check-status" class="vertical-menu-btn" onclick="showPage('reserve-status-page')">申請状況確認</button>
+    </div>
+  </main>
+
+  <main id="reserve-page" class="page" style="display: none;">
+    <button class="btn btn-secondary" style="border-radius: var(--radius-full); margin-bottom: 16px;" onclick="showPage('reserve-menu-page')">← 戻る</button>
+    <h2>新規予約</h2>
+    <p>希望する備品と利用期間を入力してください。</p>
+    <div class="glass-panel">
+      <form id="reservation-form">
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label class="form-label">申請種別</label>
+          <div class="radio-group">
+            <input type="radio" id="reserve-type-personal" name="reserveType" value="personal" checked>
+            <label for="reserve-type-personal" style="display:inline; margin-right:20px;">個人として申請</label>
+            <input type="radio" id="reserve-type-group" name="reserveType" value="group">
+            <label for="reserve-type-group" style="display:inline;">団体として申請</label>
+          </div>
+          <div id="reserve-org-container" style="display:none; margin-top: 10px;">
+            <select id="reserve-org-name" class="input-field">
+              <option value="">団体を選択...</option>
+            </select>
+          </div>
+        </div>
+        <div class="input-grid">
+          <div class="form-group">
+            <label class="form-label">カテゴリ <span class="required-badge">必須</span></label>
+            <select id="reserve-category" class="input-field" required><option value="">読み込み中...</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">予約数量 <span class="required-badge">必須</span></label>
+            <input type="number" id="reserve-quantity" class="input-field" min="1" placeholder="0" required>
+          </div>
+        </div>
+        <div class="input-grid">
+          <div class="form-group">
+            <label class="form-label">利用開始日時 <span class="required-badge">必須</span></label>
+            <input type="datetime-local" id="reserve-start-time" class="input-field" required step="3600" onchange="this.value=this.value.replace(/:[0-9]{2}$/,':00')">
+          </div>
+          <div class="form-group">
+            <label class="form-label">利用終了日時 <span class="required-badge">必須</span></label>
+            <input type="datetime-local" id="reserve-end-time" class="input-field" required step="3600" onchange="this.value=this.value.replace(/:[0-9]{2}$/,':00')">
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom: 25px;">
+          <label class="form-label">使用用途 <span class="required-badge">必須</span></label>
+          <textarea id="reserve-usage-purpose" class="input-field" rows="3" placeholder="利用目的を具体的に記入してください"></textarea>
+        </div>
+        <div style="margin-top: 20px;">
+          <button type="submit" id="reserve-execute-btn" class="btn btn-primary" style="width:100%;">申請内容を確認する</button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <main id="reserve-status-page" class="page">
+    <button class="btn btn-secondary" style="border-radius: var(--radius-full); margin-bottom: 16px;" onclick="showPage('reserve-menu-page')">← 戻る</button>
+    <h2>申請状況の確認</h2>
+    <p>あなたの予約申請履歴を表示します。</p>
+    <div id="reservation-status-list">
+      <p>（読み込み中...）</p>
+    </div>
+  </main>
+
+  <main id="mypage-page" class="page">
+    <div style="padding-top:20px;">
+      <h2 id="mypage-title" style="border-bottom:2px solid var(--primary); padding-bottom:10px; color:var(--primary);">マイページ</h2> 
+      <div id="mypage-read-view">   
+        <p class="mypage-description">
+          会員情報を変更するには<span class="text-danger">【登録変更】</span>ボタンを押してください。
+        </p>
+        <h3 class="mypage-subheader">会員情報</h3>
+        <div class="glass-panel" style="padding: 16px;">
+          <div class="info-row">
+            <span class="info-label">氏   名 :</span>
+            <span class="info-value" id="mypage-name">（読み込み中...）</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">E-mail :</span>
+            <span class="info-value" id="mypage-email">（読み込み中...）</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">所属区分 :</span>
+            <span class="info-value" id="mypage-dept-type">（読み込み中...）</span>
+          </div>
+          <div class="info-row" style="border-bottom: none;">
+            <span class="info-label">所属名 :</span>
+            <span class="info-value" id="mypage-dept-name">（読み込み中...）</span>
+          </div>
+        </div>
+      </div>
+      <div id="mypage-edit-view" style="display: none;">
+        <p class="mypage-description">
+          変更内容を入力してください。<br>
+          メールアドレスを変更したい場合は、お手数ですが現在のアカウントを登録解除し、新しいアカウントで再度新規登録してください。
+        </p>
+        <h3 class="mypage-subheader">会員情報</h3>
+        <div class="glass-panel">
+          <div class="form-group">
+            <label for="edit-lastName" class="form-label">姓 :</label>
+            <input type="text" id="edit-lastName" class="input-field">
+          </div>
+          <div class="form-group">
+            <label for="edit-firstName" class="form-label">名 :</label>
+            <input type="text" id="edit-firstName" class="input-field">
+          </div>
+          <div class="form-group">
+            <label class="form-label">E-mail :</label>
+            <input type="text" id="edit-email" class="input-field" disabled>
+          </div>
+          <div class="form-group">
+            <label class="form-label">所属区分 :</label>
+            <div class="radio-group" style="margin: 0;">
+              <input type="radio" id="edit-type-internal" name="editType" value="学祭委員">
+              <label for="edit-type-internal">学祭委員</label>
+              <input type="radio" id="edit-type-external" name="editType" value="外部団体">
+              <label for="edit-type-external">外部団体</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="edit-departmentName" class="form-label">所属名 :</label>
+            <input type="text" id="edit-departmentName" class="input-field" placeholder="例: ○○局, △△部">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="glass-footer">
+      <button id="mypage-delete-btn" class="btn btn-danger" style="flex: 1;">登録解除</button>
+      <button id="mypage-update-btn" class="btn btn-primary" style="flex: 1;">登録変更</button>
+      <button id="mypage-cancel-btn" class="btn btn-secondary" style="display: none; flex: 1;">キャンセル</button>
+      <button id="mypage-save-btn" class="btn btn-primary" style="display: none; flex: 1;">変更を保存</button>
+    </div>
+  </main>
+
+  <main id="account-switch-page" class="page">
+    <div style="padding-top:20px;">
+      <h2 style="border-bottom:2px solid var(--primary); padding-bottom:10px; color:var(--primary);">アカウント切替 / 資料DL</h2>
+      <div class="glass-panel" style="margin-top: 20px;">
+        <p style="margin-top: 0;">
+          現在 <strong><span id="current-user-email">...</span></strong> でログインしています。
+        </p>
+        <p style="font-size: 0.9em; color: var(--text-sub); line-height: 1.6; margin-bottom: 20px;">
+          別のアカウントでログインする場合や、アプリ版で資料がダウンロードできない場合は、以下のURLをコピーして<strong>SafariやChromeなどのブラウザ</strong>で開いてください。<br>
+          <span style="color: var(--danger); font-weight: bold;">※別アカウントを利用する場合は「シークレットウィンドウ（プライベートモード）」でのアクセスを推奨します。</span>
+        </p>
+        <div style="display: flex; gap: 10px; margin-bottom: 25px;">
+          <input type="text" id="account-switch-url" class="input-field" readonly style="flex: 1; font-size: 0.85em; background: var(--bg-panel);">
+          <button type="button" class="btn btn-primary" style="padding: 10px 20px;" onclick="copyAppUrl()"><i class="fa-solid fa-copy"></i></button>
+        </div>
+        <h4 style="margin-top: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; color: var(--text-main);">
+          その他の切り替え方法
+        </h4>
+        <ul style="padding-left: 20px; font-size: 0.9em; line-height: 1.8; color: var(--text-main); margin-bottom: 0;">
+          <li>ブラウザのプロファイルを分ける（PCの場合）</li>
+          <li>Googleから一度すべてのアカウントをログアウトし、目的のアカウントのみで再ログインする</li>
+        </ul>
+      </div>
+    </div>
+  </main>
+
+  <main id="app-info-page" class="page">
+    <div style="padding-top:20px;">
+      <h2 style="border-bottom:2px solid var(--primary); padding-bottom:10px; color:var(--primary);">アプリ情報</h2>
+      <div class="glass-panel" style="margin-top: 20px; text-align:center; padding-top:40px; padding-bottom:40px;">
+        <i class="fa-solid fa-warehouse" style="font-size:3.5rem; color:var(--primary); margin-bottom:15px;"></i>
+        <h3 style="margin:0; font-size:1.8rem; color:var(--text-main);">FesTrack</h3>
+        <p style="margin:5px 0 20px; font-weight:600; color:var(--text-sub);"><span id="app-info-version">...</span></p>
+        <p style="text-align:left; font-size:0.95rem; line-height:1.6; color:var(--text-main); margin-top:20px;">
+          FesTrack（フェストラック）は、梨医祭や新入生歓迎オリエンテーションにおける備品管理や企画管理などの各種業務をデジタル化し、山梨大学医学部学祭実行委員会の運営を効率化するために開発された専用システムです。当サイトは、委員会内における備品管理に特化した委員向け専用サイトです。
+        </p>
+      </div>
+      <div class="glass-panel">
+        <h4 style="margin-top:0; border-bottom:1px solid var(--border-color); padding-bottom:8px; color:var(--text-main);">
+          <i class="fa-solid fa-star" style="color:var(--warning);"></i> 主な機能
+        </h4>
+        <ul style="padding-left:20px; font-size:0.9rem; line-height:1.8; color:var(--text-main); margin-bottom:0;">
+          <li><strong>備品管理:</strong> QR/バーコードによる機材の貸出・返却・移動トラッキングが行えます。</li>
+          <li><strong>予約システム:</strong> 備品の利用予約や予約状況の確認が可能です。</li>
+          <li><strong>各種申請:</strong> 専用サイトへ遷移して企画手続きを行うことができます。</li>
+        </ul>
+      </div>
+      <div class="glass-panel">
+        <h4 style="margin-top:0; border-bottom:1px solid var(--border-color); padding-bottom:8px; color:var(--text-main);">
+          <i class="fa-solid fa-code" style="color:var(--primary);"></i> 運営・開発
+        </h4>
+        <div style="font-size:0.9rem; line-height:1.6; color:var(--text-main);">
+          <p style="margin:5px 0;"><strong>運営主体:</strong> 山梨大学医学部 学祭実行委員会</p>
+          <p style="margin:5px 0;"><strong>システム開発:</strong> 実行委員会 情報システム担当</p>
+        </div>
+      </div>
+      <div class="glass-panel" style="text-align:center; padding: 15px;">
+        <button type="button" onclick="openModal('tos-modal')" class="btn btn-secondary" style="width:100%; margin-bottom:10px;">利用規約</button>
+        <button type="button" onclick="openModal('pp-modal')" class="btn btn-secondary" style="width:100%;">プライバシーポリシー</button>
+      </div>
+      <div style="text-align:center; font-size:0.8rem; color:var(--text-sub); margin-top:30px; padding-bottom: 20px;">
+        &copy; 2026 University of Yamanashi Medical Festival Executive Committee.<br>All rights reserved.
+      </div>
+    </div>
+  </main>
+
+  <main id="registration-page" class="page">
+    <div id="home-icon" style="margin-bottom: 20px;">
+      <img id="logo-image" 
+           src=""
+           alt="FesTrack"
+           data-fileid="1vbj9TWjocqLJCI3i_gsIfNaHVqafUlDP">
+    </div>
+    <h2>新規利用登録</h2>
+    <div class="glass-panel">
+      <p>FesTrackへようこそ。<br>このアプリを利用するには、利用登録が必要です。</p>
+      <p style="margin-bottom: 24px;">
+        現在 <strong><span id="register-user-email">...</span></strong> でアクセスしています。<br>
+        このアカウントで登録する場合は、以下の情報を入力してください。
+      </p>
+      <form id="registration-form">
+        <div style="display: flex; gap: 15px;">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="reg-lastName">姓 (必須):</label>
+            <input type="text" id="reg-lastName" class="input-field" required>
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="reg-firstName">名 (必須):</label>
+            <input type="text" id="reg-firstName" class="input-field" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">所属区分 (必須):</label>
+          <div style="display: flex; gap: 10px;">
+            <button type="button" id="btn-reg-internal" class="btn btn-primary" style="flex: 1;">学祭委員</button>
+            <button type="button" id="btn-reg-external" class="btn btn-secondary" style="flex: 1;">外部団体</button>
+          </div>
+        </div>
+        <div id="reg-department-internal-container" class="form-group">
+          <label class="form-label" for="reg-department-internal">所属名 (必須):</label>
+          <select id="reg-department-internal" class="input-field">
+            <option value="総務局">総務局</option>
+            <option value="イベント局">イベント局</option>
+            <option value="広報局">広報局</option>
+            <option value="医療企画局">医療企画局</option>
+            <option value="諮問委員（スペサン）">諮問委員（スペサン）</option>
+            <option value="その他委員">その他委員</option>
+          </select>
+        </div>
+        <div id="reg-department-external-container" class="form-group" style="display: none;">
+          <label class="form-label" for="reg-department-external">団体名 (必須):</label>
+          <input type="text" id="reg-department-external" class="input-field" placeholder="例: A部">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="reg-auth-code">認証コード (必須):</label>
+          <input type="text" id="reg-auth-code" class="input-field" required placeholder="配布されたコードを入力">
+          <p style="font-size:0.8em; color:var(--text-sub); margin-top: 4px;">※ 関係者以外は登録できません。</p>
+        </div>
+        <div style="margin: 20px 0; text-align: left; font-size: 14px;">
+          <input type="checkbox" id="reg-agreement" onchange="toggleRegisterButton()">
+          <label for="reg-agreement">
+            <a href="javascript:void(0)" onclick="openModal('tos-modal')">利用規約</a> と 
+            <a href="javascript:void(0)" onclick="openModal('pp-modal')">プライバシーポリシー</a> に同意する
+          </label>
+        </div>
+        <div style="margin-top: 24px;">
+          <button type="submit" id="register-execute-btn" class="btn btn-primary" style="width: 100%;" disabled>
+            登録する
+          </button>
+        </div>
+      </form>
+      <p style="font-size: 0.8em; margin-top: 20px; color: var(--text-sub);">
+        ※ 既に登録済みにもかかわらずこの画面が表示される場合は、<br>別のアカウントでログインしている可能性があります。<br>
+        <a href="https://accounts.google.com/AccountChooser" target="_blank">アカウントを切り替える</a> か、管理者に連絡してください。
+      </p>
+    </div>
+  </main>
+
+  <main id="inbox-page" class="page" style="display: none;">
+    <button class="btn btn-secondary" style="border-radius: var(--radius-full); margin-bottom: 16px;" onclick="showPage('home-page')">← ホームに戻る</button>
+    <h2>受信メッセージ 一覧</h2>
+    <div style="display: flex; gap: 10px; margin-bottom: 15px; overflow-x: auto; padding-bottom: 5px;">
+      <button class="btn btn-primary filter-btn" onclick="filterInbox('全て', this)">全て</button>
+      <button class="btn btn-secondary filter-btn" onclick="filterInbox('配信', this)">配信</button>
+      <button class="btn btn-secondary filter-btn" onclick="filterInbox('返信', this)">返信</button>
+      <button class="btn btn-secondary filter-btn" onclick="filterInbox('資料', this)">資料</button>
+    </div>
+    <div class="glass-panel" style="padding: 0; overflow: hidden;">
+      <div id="full-inbox-list">
+        <p style="padding:20px; text-align:center;">読み込み中...</p>
+      </div>
+    </div>
+  </main>
+
+  <div id="tos-modal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 600px; max-height: 80vh; overflow-y: auto; text-align: left;">
+      <h3 style="margin-top: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">FesTrack サービス利用規約</h3>
+      <div style="font-size: 12px; text-align: left; white-space: pre-wrap; line-height: 1.6;">
+        <h4>第1条（適用）</h4>
+        <p>1.	本規約は, 山梨大学医学部学祭実行委員会（以下「当委員会」）が提供する学祭運営システム「FesTrack」（以下「本サービス」）の利用条件を定めるものです. 本サービスを利用する全てのユーザーに適用されます.<br>2.	当委員会は本サービスに関し，本規約のほか，ご利用にあたってのルール等，各種の定め（以下，「個別規定」といいます.）をすることがあります. これら個別規定はその名称のいかんに関わらず，本規約の一部を構成するものとします.<br>3.	本規約の規定が前条の個別規定の規定と矛盾する場合には，個別規定において特段の定めなき限り，個別規定の規定が優先されるものとします.</p>
+        <h4>第2条（定義）</h4>
+        <p>1.	「ユーザー」とは, 本サービスを利用する全ての個人を指します.<br>2.	「内部ユーザー」とは, 当委員会に所属し, 備品管理, 販売管理, 情報管理等の運営機能を利用する権限を持つユーザーを指します.<br>3.	「外部ユーザー」とは, 学祭に企画を出展する各団体の代表者等, 企画手続きに関する機能を利用するユーザーを指します.</p>
+        <h4>第3条（アカウント管理と利用登録）</h4>
+        <p>1.	本サービスにおいては, 登録希望者が本規約に同意の上, 当委員会が指定する方法（Googleアカウント認証等）によって利用登録を申請し, 当委員会がこれを承認することによって，利用登録が完了するものとします.<br>2.	当委員会は，利用登録の申請者に以下の事由があると判断した場合，利用登録の申請を承認しないことがあり，その理由については一切の開示義務を負わないものとします.<br>&emsp;1.	利用登録の申請に際して虚偽の事項を届け出た場合<br>&emsp;2.	本規約に違反したことがある者からの申請である場合<br>&emsp;3.	その他，当委員会が利用登録を相当でないと判断した場合<br>3.	ユーザーは, いかなる場合にも, ユーザーIDおよびパスワードを第三者に譲渡または貸与し, もしくは第三者と共用することはできません. 当委員会は, ユーザーIDとパスワードの組み合わせが登録情報と一致してログインされた場合には, そのユーザーIDを登録しているユーザー自身による利用とみなします.<br>4.	当委員会は, アカウントの不正利用によって生じた損害について一切の責任を負いません.</p>
+        <h4>第4条（利用範囲と権限）</h4>
+        <p>1.	本サービスは, ユーザーの属性（内部ユーザー・外部ユーザー）に応じて利用できる機能が制限されます.<br>2.	外部ユーザーは, 企画出展に係る申請および各種手続きに限り本サービスを利用できます.<br>3.	内部ユーザーは, 前項に加え, 当委員会が許可した備品管理等の運営管理機能を利用できます.<br>4.	当委員会は, システムの運用状況に応じ, 事前の通知なく機能の追加, 変更, 制限を行うことができます.</p>
+        <h4>第5条（企画手続きに関する特則）</h4>
+        <p>1.	外部ユーザーは, 企画手続きにおいて正確かつ最新の情報を提供するものとします.<br>2.	申請内容に虚偽や重大な誤りがある場合, または学祭の規程に違反する場合, 当委員会は申請を却下, または事後的に承認を取り消すことができます.</p>
+        <h4>第6条（禁止事項）</h4>
+        <p>ユーザーは, 本サービスの利用にあたり以下の行為をしてはなりません.<br>&emsp;1.	法令または公序良俗に違反する行為<br>&emsp;2.	当委員会, 他のユーザー, または第三者のサーバーやネットワークの機能を破壊したり, 妨害したりする行為<br>&emsp;3.	本サービスのシステム上のバグや脆弱性を不正に利用する行為<br>&emsp;4.	本サービスによって得られた情報を商業的に利用する行為<br>&emsp;5.	他のユーザーに関する個人情報等を収集または蓄積する行為<br>&emsp;6.	不正な目的を持って本サービスを利用する行為<br>&emsp;7.	他のユーザーに成りすます行為<br>&emsp;8.	その他, 当委員会が不適切と判断する行為</p>
+        <h4>第7条（本サービスの提供の停止等）</h4>
+        <p>当委員会は, 以下のいずれかの事由があると判断した場合, ユーザーに事前に通知することなく本サービスの全部または一部の提供を停止または中断することができます.<br>&emsp;1.	本サービスにかかるコンピュータシステムの保守点検または更新を行う場合<br>&emsp;2.	地震, 落雷, 火災, 停電または天災などの不可抗力により, 本サービスの提供が困難となった場合<br>&emsp;3.	コンピュータまたは通信回線等が事故により停止した場合<br>&emsp;4.	その他, 当委員会が本サービスの提供が困難と判断した場合</p>
+        <h4>第8条（利用制限および登録抹消）</h4>
+        <p>1.	当委員会は，ユーザーが以下のいずれかに該当する場合には，事前の通知なく，ユーザーに対して，本サービスの全部もしくは一部の利用を制限し，またはユーザーとしての登録を抹消することができるものとします.<br>&emsp;1.	本規約のいずれかの条項に違反した場合<br>&emsp;2.	登録事項に虚偽の事実があることが判明した場合<br>&emsp;3.	当委員会からの連絡に対し，一定期間返答がない場合<br>&emsp;4.	本サービスについて，最終の利用から一定期間利用がない場合<br>&emsp;5.	その他，当委員会が本サービスの利用を適当でないと判断した場合<br>2.	当委員会は，本条に基づき当委員会が行った行為によりユーザーに生じた損害について，一切の責任を負いません.</p>
+        <h4>第9条（退会）</h4>
+        <p>ユーザーは，当委員会の定める退会手続により，本サービスから退会できるものとします.</p>
+        <h4>第10条（免責事項）</h4>
+        <p>1.	当委員会は, 本サービスに事実上または法律上の瑕疵（安全性, 信頼性, 正確性, 完全性, 有効性, 特定の目的への適合性, セキュリティなどに関する欠陥, エラーやバグ, 権利侵害などを含みます）がないことを明示的にも黙示的にも保証しておりません.<br>2.	当委員会は, 本サービスに起因してユーザーに生じたあらゆる損害（データの消失, 申請の遅延等を含みます）について一切の責任を負いません.</p>
+        <h4>第11条（利用規約の変更）</h4>
+        <p>当委員会は, 必要と判断した場合には, ユーザーに通知することなくいつでも本規約を変更することができるものとします. 変更後の規約は, 本サービス上に掲示された時点から効力を生じるものとします.</p>
+        <h4>第12条（準拠法・裁判管轄）</h4>
+        <p>1.	本規約の解釈にあたっては, 日本法を準拠法とします.<br>2.	本サービスに関して紛争が生じた場合には, 甲府地方裁判所または甲府簡易裁判所を専属的合意管轄とします.</p>
+        <p>________________________________________</p>
+        <p>制定：令和8年4月4日</p>
+      </div>
+      <div class="modal-footer" style="justify-content: center;">
+        <button class="btn btn-primary" onclick="closeModal('tos-modal')">閉じる</button>
+      </div>
+    </div>
+  </div>
+  <div id="pp-modal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 600px; max-height: 80vh; overflow-y: auto; text-align: left;">
+      <h3 style="margin-top: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">プライバシーポリシー</h3>
+      <div style="font-size: 12px; text-align: left; white-space: pre-wrap; line-height: 1.6;">
+        <p>山梨大学医学部学祭実行委員会（以下「当委員会」といいます. ）は, 当委員会が提供する学祭運営システム「FesTrack」および関連サービス（以下「本サービス」といいます. ）における, ユーザーの個人情報の取扱いについて, 以下のとおりプライバシーポリシー（以下「本ポリシー」といいます. ）を定めます. </p>
+        <h4>第1条（個人情報）</h4>
+        <p>「個人情報」とは, 個人情報保護法にいう「個人情報」を指すものとし, 生存する個人に関する情報であって, 当該情報に含まれる氏名, 学籍番号, 住所, 電話番号, 連絡先その他の記述等により特定の個人を識別できる情報を指します.</p>
+        <h4>第2条（個人情報の収集方法）</h4>
+        <p>当委員会は, ユーザーが本サービスを利用し登録等を行う際に, 氏名, 学籍番号, 所属, 電話番号, メールアドレスなどの個人情報をお尋ねすることがあります.</p>
+        <h4>第3条（個人情報を収集・利用する目的）</h4>
+        <p>当委員会が個人情報を収集・利用する目的は, 以下のとおりです. <br>1.	ユーザーの所属の確認ならびに本人確認のため<br>2.	本サービス上で登録, 申請または申込された内容の確認および管理のため<br>3.	当委員会からの各種連絡（通知, メール送付等）のため<br>4.	本サービスの提供, 保守, 開発および改善のため<br>5.	不正・不当な目的でサービスを利用しようとするユーザーの特定をし, ご利用をお断りするため<br>6.	その他, 梨医祭, 新歓オリエンテーションまたは当委員会に関わるサービス向上のため<br>7.	上記の利用目的に付随する目的</p>
+        <h4>第4条（利用目的の変更）</h4>
+        <p>当委員会は, 利用目的が変更前と関連性を有すると合理的に認められる場合に限り, 個人情報の利用目的を変更するものとします. 利用目的の変更を行った場合には, 変更後の目的について, 当委員会所定の方法によりユーザーに通知し, または本サービス上に公表するものとします. </p>
+        <h4>第5条（個人情報の安全管理措置）</h4>
+        <p>当委員会は, 個人情報を適切に扱う為, 当委員会内での管理体制の整備, 委員の教育, 並びに個人情報への不正なアクセスや個人情報の紛失・破壊・改竄および漏洩等の防止に関して適切な措置を講じることにより, 個人情報の保護に努めます. </p>
+        <h4>第6条（個人情報の第三者提供）</h4>
+        <p>当委員会は, 利用目的の達成の範囲内において, ユーザーの同意を得たうえで, 個人情報を委員以外の第三者に提供する場合があります. また, 法令により認められる範囲で, ユーザーの同意を得ることなく第三者に提供する場合があります. 個人情報を提供する場合は, 本ポリシーに準拠して個人情報の保護が提供先で十分に図られることを条件とする等, 適切な処置を行います. </p>
+        <h4>第7条（個人情報の開示）</h4>
+        <p>当委員会は, ユーザー本人から個人情報の開示を求められたときは, 本人に対し, 遅滞なくこれを開示します. ただし, 開示することにより次のいずれかに該当する場合は, その全部または一部を開示しないことがあり, 開示しない決定をした場合には, その旨を遅滞なく通知します. <br>1.	ユーザーの本人確認ができない場合<br>2.	本人または第三者の生命, 身体, 財産その他の権利利益を害するおそれがある場合<br>3.	当委員会の業務の適正な実施に著しい支障を及ぼすおそれがある場合<br>4.	その他法令に違反することとなる場合</p>
+        <h4>第8条（個人情報の訂正および削除・利用停止等）</h4>
+        <p>1.	ユーザーは, 当委員会の保有する自己の個人情報の内容の訂正, 追加もしくは削除または利用の停止もしくは第三者への提供の停止（以下「訂正等」といいます. ）を請求することができます.<br>2.	当委員会は, 前項の請求を受けた場合は遅滞なく必要な調査を行い, その結果に基づき個人情報の訂正等を行い, その旨をユーザーに通知します. ただし, 法令等の規定に基づき訂正等を行わないことがあり, その場合はその旨を遅滞なく通知します. </p>
+        <h4>第9条（プライバシーポリシーの変更）</h4>
+        <p>当委員会は, 個人情報の保護の強化, 法令及びその他の規範の変更等の理由により, 本ポリシーの内容を継続的に見直し, その改善に努めます. 本ポリシーの改定は, 本サービス上での掲示その他ユーザーに広く周知できる手段を用いて公表します. </p>
+        <h4>第10条（お問い合わせ窓口）</h4>
+        <p>本ポリシーに関するお問い合わせ, 各種手続きについては, 下記の窓口にて対応いたします. <br>&emsp;山梨大学医学部学祭実行委員会<br>&emsp;本部所在地：山梨県中央市下河東1110 山梨大学医学部キャンパス構内 福利厚生棟1階<br>&emsp;E-mail：nashiisaikouhou@gmail.com</p>
+        <p>________________________________________</p>
+        <p>制定：令和8年4月4日</p>
+      </div>
+      <div class="modal-footer" style="justify-content: center;">
+        <button class="btn btn-primary" onclick="closeModal('pp-modal')">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="loading-overlay" class="modal-overlay" style="flex-direction: column;">
+    <div class="loading-spinner"></div>
+    <p id="loading-message" style="color: var(--text-inverse); margin-top: 15px; font-weight: 600;">処理中...</p>
+  </div>
+
+  <div id="settings-overlay" class="slide-overlay">
+    <div id="settings-panel">
+      <div class="settings-header" style="background: var(--glass-bg); backdrop-filter: blur(20px);">
+        <h2 style="margin:0; font-size: 1.3rem;">メニュー</h2>
+        <button id="settings-close-btn" style="background:none; border:none; font-size:1.5rem; color:var(--text-sub); cursor:pointer;">✖</button>
+      </div>
+      <div class="settings-content" style="padding: 20px;">
+        <button class="btn btn-secondary" style="width: 100%; justify-content: space-between; margin-bottom: 12px;" onclick="showPage('mypage-page'); closeSettings();">マイページ <span>›</span></button>
+        <button class="btn btn-secondary" style="width: 100%; justify-content: space-between; margin-bottom: 12px;" id="btn-account-switch">アカウント切り替え <span>›</span></button>
+        <a href="<?= appUrl ?>?view=external" target="_top" class="btn btn-secondary" style="width: 100%; justify-content: space-between; margin-bottom: 12px; text-decoration: none;">企画手続き <span>›</span></a>
+        <button class="btn btn-secondary" style="width: 100%; justify-content: space-between; margin-bottom: 12px;" id="btn-app-info">アプリ情報 <span>›</span></button>
+        <a href="https://docs.google.com/forms/d/e/1FAIpQLSelm36RuYuey-7fWa03yhWmublwBwygNJdLYab-VjSEzUIPOw/viewform" target="_blank" class="btn btn-secondary" style="width: 100%; justify-content: space-between; text-decoration: none;" id="feedback-link">ご意見・ご要望 <span>›</span></a>
+      </div>
+      <div class="settings-footer" style="padding: 20px; text-align: center; color: var(--text-sub);">
+        <div id="settings-version">（バージョン読み込み中...）</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="alert-modal-overlay" class="modal-overlay">
+    <div class="modal-box">
+      <h4 id="alert-modal-title">エラー</h4>
+      <p id="alert-modal-message" style="line-height: 1.6; margin-bottom: 20px; color: var(--text-main);"></p>
+      <div class="modal-footer" style="justify-content: flex-end;">
+        <button id="alert-modal-close-btn" class="btn btn-secondary">閉じる</button>
+      </div>
+    </div>
+  </div>
+  <div id="confirm-modal-overlay" class="modal-overlay">
+    <div class="modal-box">
+      <h4 id="confirm-modal-title">確認</h4>
+      <p id="confirm-modal-message" style="line-height: 1.6; margin-bottom: 20px; color: var(--text-main);"></p>
+      <div class="modal-footer">
+        <button id="cancel-confirm-btn" class="btn btn-secondary">キャンセル</button>
+        <button id="confirm-action-btn" class="btn btn-primary">OK</button>
+      </div>
+    </div>
+  </div>
+  <div id="delete-modal-overlay" class="modal-overlay">
+    <div class="modal-box">
+      <h4>本当に登録解除を実行しますか？</h4>
+      <p>「登録解除」を押した時点ですべての会員情報が削除されます。</p>  
+      <div class="modal-footer">
+        <button id="cancel-delete-btn" class="btn btn-secondary">キャンセル</button>
+        <button id="confirm-delete-btn" class="btn btn-danger">登録解除</button>
+      </div>
+    </div>
+  </div>
+
+  <?!= HtmlService.createTemplateFromFile('js_common').evaluate().getContent(); ?>
+  <script>
+    try {
+      userName = <?!= JSON.stringify(typeof userName !== 'undefined' ? userName : "") ?>;
+      userRole = <?!= JSON.stringify(typeof userRole !== 'undefined' ? userRole : "") ?>;
+      appVersion = <?!= JSON.stringify(typeof versionInfo !== 'undefined' ? versionInfo : "") ?>;
+      appUrl = <?!= JSON.stringify(typeof appUrl !== 'undefined' ? appUrl : "") ?>;
+    } catch (e) {
+      console.error("GAS Init Error:", e);
+    }
+    const runServer = (functionName, ...args) => {
+      return new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          [functionName](...args);
+      });
+    };
+    // --- State Management ---
+    let scannedItems = []; // 現在のスキャンリスト
+    let allInboxData = []; // 受信メッセージ全件
+    
+    // --- Initialization ---
+    document.addEventListener('DOMContentLoaded', () => {
+      initApp();
+    });
+    function initApp() {
+      loadAllDriveImages();
+      setupEventListeners();
+      const welcomeSpan = document.getElementById('welcome-user-name');
+      if (welcomeSpan) welcomeSpan.textContent = userName || "ゲスト";
+      const verEl = document.getElementById('settings-version');
+      if (verEl) verEl.textContent = appVersion;
+      if (userRole === 'ゲスト') {
+        const glassHeader = document.querySelector('.glass-header');
+        if (glassHeader) {
+          glassHeader.style.display = 'none';
+        }
+        showPage('registration-page');
+      } else {
+        showPage('home-page');
+      }
+    }
+    // --- Image Loading ---
+    function loadAllDriveImages() {
+      const images = document.querySelectorAll('img[data-fileid]');
+      images.forEach(img => {
+        const fileId = img.dataset.fileid;
+        if(!fileId) return;
+        google.script.run
+          .withSuccessHandler(dataUrl => { img.src = dataUrl; })
+          .withFailureHandler(err => console.error(`Img Load Error: ${fileId}`, err))
+          .fetchDataUrl(fileId);
+      });
+    }
+    // --- Page Navigation & Camera Control ---
+    const allPages = document.querySelectorAll('.page');
+    function hideAllPages() {
+      allPages.forEach(page => page.style.display = 'none');
+      stopCamera(); // ページ遷移時は必ずカメラを止める
+    }
+    function showPage(pageId) {
+      hideAllPages();
+      const targetPage = document.getElementById(pageId);
+      if (!targetPage) return;
+      targetPage.style.display = 'block';
+      switch (pageId) {
+        case 'home-page':
+          loadUserMessages();
+          break;
+        case 'checkout-page':
+          initScanSession('checkout');
+          populateOrganizationDropdown('checkout-org-name');
+          break;
+        case 'return-page':
+          initScanSession('return');
+          break;
+        case 'move-page':
+          initScanSession('move');
+          populateLocationDropdown();
+          break;
+        case 'reserve-page':
+          populateCategoryDropdown('reserve-category');
+          populateOrganizationDropdown('reserve-org-name');
+          break;
+        case 'reserve-status-page':
+          loadMyReservations();
+          break;
+        case 'mypage-page':
+          loadMyPageInfo();
+          toggleEditMode(false);
+          break;
+        case 'account-switch-page':
+          document.getElementById('current-user-email').textContent = userName;
+          const urlInput = document.getElementById('account-switch-url');
+          if (urlInput) {
+            urlInput.value = appUrl; 
+          }
+          break;
+        case 'app-info-page':
+          document.getElementById('app-info-version').textContent = appVersion;
+          break;
+        case 'registration-page':
+          document.getElementById('register-user-email').textContent = userName;
+          break;
+        case 'inbox-page':
+          loadUserMessages();
+          break;
+      }
+    }
+    function closeSettings() {
+      const overlay = document.getElementById('settings-overlay');
+      if (overlay) {
+        overlay.classList.remove('show');
+      }
+    }
+    function copyAppUrl() {
+      const input = document.getElementById('account-switch-url');
+      if (!input) return;
+      input.select();
+      input.setSelectionRange(0, 99999); // モバイル対応
+      try {
+        navigator.clipboard.writeText(input.value).then(() => {
+          showAlert("URLをコピーしました。\nブラウザ（またはシークレットウィンドウ）のアドレスバーに貼り付けて開いてください。");
+        }).catch(err => {
+          document.execCommand('copy');
+          showAlert("URLをコピーしました。");
+        });
+      } catch (err) {
+        document.execCommand('copy');
+        showAlert("URLをコピーしました。");
+      }
+    }
+    // --- Camera & QR Logic ---
+    let currentVideoId = '';
+    let currentListId = '';
+    let currentBtnId = '';
+    let currentMode = ''; // checkout, return, move
+    function initScanSession(mode) {
+      currentMode = mode;
+      scannedItems = [];
+      isProcessingScan = false;
+      currentVideoId = `${mode}-qr-video`;
+      currentListId = `${mode}-list`;
+      currentBtnId = `${mode}-execute-btn`;
+      document.getElementById(currentListId).innerHTML = "<li>（まだスキャンされていません）</li>";
+      document.getElementById(`${mode}-count`).textContent = "0";
+      if(mode === 'checkout') document.getElementById('checkout-org-name').value = "";
+      if(mode === 'move') document.getElementById('move-location').value = "";
+      const btn = document.getElementById(currentBtnId);
+      if(btn) btn.disabled = true;
+      const callback = (mode === 'checkout') ? handleCheckoutScan : handleScanResult;
+      startCamera(currentVideoId, callback);
+    }
+    function handleCheckoutScan(data) {
+      if (isProcessingScan) return;
+      isProcessingScan = true;
+      if (data.startsWith('ORG')) {
+        const select = document.getElementById('checkout-org-name');
+        const currentSelectedValue = select.value;
+        let foundIndex = -1;
+        let foundText = "";
+        for (let i = 0; i < select.options.length; i++) {
+          if (select.options[i].value && select.options[i].value === data) {
+            foundIndex = i;
+            foundText = select.options[i].text;
+            break;
+          }
+        }
+        if (foundIndex !== -1) {
+          if (currentSelectedValue && currentSelectedValue !== data) {
+            playBeep();
+            showConfirm(
+              "貸出先の変更", 
+              `現在の貸出先から「${foundText}」へ変更しますか？<br>※スキャン済みの備品リストはそのまま保持されます。`, 
+              () => {
+                select.selectedIndex = foundIndex;
+                const feedback = document.getElementById('scan-feedback');
+                if (feedback) {
+                  feedback.textContent = `貸出先を「${foundText}」に変更しました`;
+                  feedback.style.color = 'green';
+                }
+                setTimeout(() => { 
+                  isProcessingScan = false; 
+                  if(feedback) feedback.textContent = ""; 
+                }, 1500);
+              }
+            );
+            setTimeout(() => {
+              const cancelBtn = document.getElementById('cancel-confirm-btn');
+              if (cancelBtn) {
+                const oldClick = cancelBtn.onclick;
+                cancelBtn.onclick = () => {
+                  if (oldClick) oldClick();
+                  setTimeout(() => { isProcessingScan = false; }, 500);
+                };
+              }
+            }, 100);
+            return;
+          }
+          select.selectedIndex = foundIndex;
+          playBeep();
+          const feedback = document.getElementById('scan-feedback');
+          if (feedback) {
+            feedback.textContent = `貸出先を「${foundText}」に設定しました`;
+            feedback.style.color = 'green';
+          }
+          setTimeout(() => { 
+            isProcessingScan = false; 
+            if(feedback) feedback.textContent = ""; 
+          }, 1500);
+        } else {
+          playErrorBeep();
+          showAlert(`団体ID「${data}」はマスタに登録されていません。`, "登録なし");
+          setTimeout(() => { isProcessingScan = false; }, 1500);
+        }
+        return;
+      }
+      isProcessingScan = false; 
+      handleScanResult(data);
+    }
+    function handleScanResult(data) {
+      if (scannedItems.includes(data)) {
+        playErrorBeep();
+        return;
+      }
+      if (typeof currentScanMode !== 'undefined' && currentScanMode && currentScanMode.startsWith('swap_')) {
+        const inputId = currentScanMode === 'swap_old' ? 'swap-old-id' : 'swap-new-id';
+        const inputEl = document.getElementById(inputId);
+        if (inputEl) {
+          inputEl.value = data;
+          stopCamera();
+          document.getElementById('scanner-modal').style.display = 'none';
+          playBeep();
+        }
+        return;
+      }
+      if (isProcessingScan) return; 
+      isProcessingScan = true;
+      const feedback = document.getElementById('scan-feedback');
+      if(feedback) {
+          feedback.textContent = `タグ「${data}」を照会中...`;
+          feedback.style.color = 'blue';
+      }
+      google.script.run
+        .withSuccessHandler((res) => {
+          if (res.success) {
+            if (currentScanMode === 'checkout' && res.status && res.status !== '利用可能') {
+              playErrorBeep();
+              if(feedback) {
+                  feedback.textContent = `「${res.name}」は現在「${res.status}」のため貸出不可です`;
+                  feedback.style.color = 'red';
+              }
+              setTimeout(() => { isProcessingScan = false; }, 1500);
+              return;
+            }
+            if (!scannedItems.includes(res.itemId)) {
+              addItemList(res.itemId);
+              if(feedback) {
+                  feedback.textContent = `「${res.name}」を追加しました`;
+                  feedback.style.color = 'green';
+              }
+              playBeep();
+            } else {
+              playErrorBeep();
+              if(feedback) {
+                  feedback.textContent = "既にリストに追加済みです";
+                  feedback.style.color = 'orange';
+              }
+            }
+          } else {
+            playErrorBeep();
+            if(feedback) {
+                feedback.textContent = res.message; 
+                feedback.style.color = 'red';
+            }
+          }
+          setTimeout(() => { 
+            isProcessingScan = false; 
+            if(feedback) feedback.textContent = ""; 
+          }, 500);
+        })
+        .withFailureHandler((err) => {
+          playErrorBeep();  
+          console.error(err);
+          if(feedback) {
+            feedback.textContent = "サーバー通信エラー";
+            feedback.style.color = 'red';
+          }
+          isProcessingScan = false;
+        })
+        .findItemIdByTag(data);
+    }
+    function addItemList(id) {
+      playBeep();
+      scannedItems.push(id);
+      updateScanListUI();
+    }
+    function removeItem(index) {
+      scannedItems.splice(index, 1);
+      updateScanListUI();
+    }
+    function updateScanListUI() {
+      const listEl = document.getElementById(currentListId);
+      const btnEl = document.getElementById(currentBtnId);
+      const countEl = document.getElementById(`${currentMode}-count`);
+      if (scannedItems.length === 0) {
+        listEl.innerHTML = "<li>（まだスキャンされていません）</li>";
+        btnEl.disabled = true;
+        countEl.textContent = "0";
+      } else {
+        listEl.innerHTML = "";
+        scannedItems.forEach((id, index) => {
+          const li = document.createElement('li');
+          li.className = 'scan-list-item';
+          li.innerHTML = `
+            <span>${id}</span>
+            <button class="btn btn-danger" style="padding: 0; width: 32px; height: 32px; border-radius: 50%;" type="button">✖</button>
+          `;
+          li.querySelector('.btn-danger').addEventListener('click', () => removeItem(index));
+          listEl.appendChild(li);
+        });
+        btnEl.disabled = false;
+        countEl.textContent = scannedItems.length;
+      }
+    }
+    function switchScanTab(pagePrefix, tabType) {
+      const buttons = document.querySelectorAll(`#${pagePrefix}-page .scan-tab-btn`);
+      buttons.forEach(btn => btn.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+      document.getElementById(`${pagePrefix}-tab-qr`).classList.remove('active');
+      document.getElementById(`${pagePrefix}-tab-manual`).classList.remove('active');
+      document.getElementById(`${pagePrefix}-tab-${tabType}`).classList.add('active');
+      if (tabType === 'manual') {
+        const inputField = document.getElementById(`${pagePrefix}-manual-id`);
+        if (inputField) inputField.focus();
+      }
+    }
+    function submitManualInput(inputId) {
+      const inputElem = document.getElementById(inputId);
+      if (!inputElem) return;
+      const scannedId = inputElem.value.trim(); // 前後の空白を削除
+      if (scannedId === "") {
+        showAlert("IDを入力してください。", "エラー");
+        return;
+      }
+      if (inputId.includes('checkout')) {
+        handleCheckoutScan(scannedId);
+      } else {
+        handleScanResult(scannedId); 
+      }
+      inputElem.value = "";
+      inputElem.focus();
+    }
+    // --- Agreement & Modal Logic ---
+    function toggleRegisterButton() {
+      const checkbox = document.getElementById('reg-agreement');
+      const btn = document.getElementById('register-execute-btn');
+      if (checkbox && btn) {
+        btn.disabled = !checkbox.checked;
+      }
+    }
+    // --- Event Listeners Setup ---
+    function setupEventListeners() {
+      const setClick = (id, func) => {
+        const el = document.getElementById(id);
+        if (el) el.onclick = func;
+      };
+      setClick('home-icon', () => showPage('home-page'));
+      setClick('settings-icon', () => document.getElementById('settings-overlay').classList.add('show'));
+      setClick('settings-close-btn', () => document.getElementById('settings-overlay').classList.remove('show'));
+      const settingsOverlay = document.getElementById('settings-overlay');
+      if (settingsOverlay) {
+          settingsOverlay.onclick = (e) => {
+            if(e.target.id === 'settings-overlay') settingsOverlay.classList.remove('show');
+          };
+      }
+      setClick('alert-modal-close-btn', closeAlert);
+      setClick('cancel-confirm-btn', () => {
+        document.getElementById('confirm-modal-overlay').style.display = 'none';
+      });
+      setClick('checkout-execute-btn', () => {
+        const org = document.getElementById('checkout-org-name').value;
+        if (!org) return showAlert("貸出先を選択してください。", "エラー");
+        executeTransaction('processCheckout', scannedItems, org);
+      });
+      setClick('return-execute-btn', () => {
+        executeTransaction('processReturn', scannedItems);
+      });
+      setClick('move-execute-btn', () => {
+        const loc = document.getElementById('move-location').value;
+        if (!loc) return showAlert("移動先を選択してください。", "エラー");
+        executeTransaction('processMove', scannedItems, loc);
+      });
+      const resForm = document.getElementById('reservation-form');
+      if (resForm) {
+          resForm.onsubmit = (e) => {
+            e.preventDefault();
+            submitReservation();
+          };
+      }
+      document.getElementsByName('reserveType').forEach(r => {
+        r.addEventListener('change', (e) => {
+          const orgContainer = document.getElementById('reserve-org-container');
+          if (orgContainer) orgContainer.style.display = (e.target.value === 'group') ? 'block' : 'none';
+        });
+      });
+      setClick('mypage-update-btn', () => {
+        populateMyPageEditForm();
+        toggleEditMode(true);
+      });
+      setClick('mypage-cancel-btn', () => toggleEditMode(false));
+      setClick('mypage-save-btn', saveMyPageInfo);
+      setClick('mypage-delete-btn', confirmDeleteUser);
+      setClick('btn-account-switch', () => {
+        const overlay = document.getElementById('settings-overlay');
+        if (overlay) overlay.classList.remove('show');
+        showPage('account-switch-page');
+      });
+      setClick('btn-app-info', () => {
+        const overlay = document.getElementById('settings-overlay');
+        if (overlay) overlay.classList.remove('show');
+        showPage('app-info-page');
+      });
+      const regForm = document.getElementById('registration-form');
+      if (regForm) {
+          regForm.onsubmit = (e) => {
+            e.preventDefault();
+            handleRegistration();
+          };
+      }
+      const btnInternal = document.getElementById('btn-reg-internal');
+      const btnExternal = document.getElementById('btn-reg-external');
+      if (btnInternal && btnExternal) {
+        const toggleRegistrationType = (isInternal) => {
+          if (isInternal) {
+            btnInternal.className = 'btn btn-primary';
+            btnExternal.className = 'btn btn-secondary';
+          } else {
+            btnExternal.className = 'btn btn-primary';
+            btnInternal.className = 'btn btn-secondary';
+          }
+          const internalCont = document.getElementById('reg-department-internal-container');
+          const externalCont = document.getElementById('reg-department-external-container');
+          const internalInput = document.getElementById('reg-department-internal');
+          const externalInput = document.getElementById('reg-department-external');
+          if(internalCont) internalCont.style.display = isInternal ? 'block' : 'none';
+          if(externalCont) externalCont.style.display = !isInternal ? 'block' : 'none';
+          if(internalInput) internalInput.required = isInternal;
+          if(externalInput) externalInput.required = !isInternal;
+        };
+        btnInternal.onclick = () => toggleRegistrationType(true);
+        btnExternal.onclick = () => toggleRegistrationType(false);
+      }
+    }
+    // --- Transaction Executor ---
+    function executeTransaction(serverFuncName, ...args) {
+      if (scannedItems.length === 0) return showAlert("スキャンされた備品がありません。", "エラー");
+      stopCamera();
+      showLoading("処理中...");
+      google.script.run
+        .withSuccessHandler((msg) => {
+          hideLoading();
+          scannedItems = [];
+          updateScanListUI();
+          showAlert(msg, "完了", true, () => showPage('home-page'));
+        })
+        .withFailureHandler((err) => {
+          hideLoading();
+          showAlert("エラーが発生しました: " + err.message, "エラー");
+          showPage('home-page');
+        })
+        [serverFuncName](...args);
+    }
+    // --- Data Loaders (Dropdowns) ---
+    function populateOrganizationDropdown(id) {
+      const sel = document.getElementById(id);
+      google.script.run.withSuccessHandler(list => {
+        sel.innerHTML = '<option value="">-- 選択してください --</option>';
+        if(list) {
+          list.forEach(item => {
+            if (typeof item === 'object' && item.name) {
+              sel.innerHTML += `<option value="${item.name}">${item.name}</option>`;
+            } else {
+              sel.innerHTML += `<option value="${item}">${item}</option>`;
+            }
+          });
+        }
+      }).getOrganizationList();
+    }
+    function populateCategoryDropdown(id) {
+        const sel = document.getElementById(id);
+        google.script.run.withSuccessHandler(list => {
+            sel.innerHTML = '<option value="">-- 選択してください --</option>';
+            if(list) list.forEach(item => sel.innerHTML += `<option value="${item}">${item}</option>`);
+        }).getCategoryList();
+    }
+    function populateLocationDropdown() {
+        const sel = document.getElementById('move-location');
+        google.script.run.withSuccessHandler(list => {
+            sel.innerHTML = '<option value="">-- 選択してください --</option>';
+            if(list) list.forEach(item => sel.innerHTML += `<option value="${item}">${item}</option>`);
+        }).getLocationList();
+    }
+    // --- Specific Logic for Forms (Extracted) ---
+    function submitReservation() {
+      const isPersonal = document.getElementById('reserve-type-personal').checked;
+      const orgName = isPersonal ? userName : document.getElementById('reserve-org-name').value;
+      const purpose = document.getElementById('reserve-usage-purpose').value;
+      const category = document.getElementById('reserve-category').value;
+      const qty = parseInt(document.getElementById('reserve-quantity').value, 10);
+      const start = new Date(document.getElementById('reserve-start-time').value);
+      const end = new Date(document.getElementById('reserve-end-time').value);
+      if (!isPersonal && orgName === "総務局") { /* 除外 */ }
+      else if (!purpose.trim()) {
+        return showAlert("使用用途を入力してください。", "入力エラー");
+      }
+      const diffDays = (end - start) / (1000 * 60 * 60 * 24);
+      let isWarning = false;
+      if (diffDays >= 3) isWarning = true;
+      if (category.includes("机") || category.includes("椅子")) { if (qty > 10) isWarning = true; }
+      else if (!category.includes("ステージ") && qty > 5) isWarning = true;
+      const data = {
+        organizationName: orgName,
+        category: category,
+        quantity: qty,
+        startTime: document.getElementById('reserve-start-time').value,
+        endTime: document.getElementById('reserve-end-time').value,
+        usagePurpose: purpose
+      };
+      const confirmMsg = isWarning 
+        ? "予約期間が長期間、または数量が多いため、<br><strong style='color:red'>却下される可能性が高いです。</strong><br>このまま申請しますか？"
+        : "この内容で予約を申請しますか？";
+      showConfirm("申請確認", confirmMsg, () => {
+        showLoading("申請中...");
+        google.script.run.withSuccessHandler(msg => {
+          hideLoading();
+          showAlert(msg, "完了", true, () => {
+            document.getElementById('reservation-form').reset();
+            showPage('home-page');
+          });
+        }).withFailureHandler(onFailure).submitReservation(data);
+      }, isWarning); // 警告時はボタンを赤くする等のフラグとして利用可能
+    }
+    function _executeSubmit(data) {
+      showLoading("申請中...");
+      document.querySelector('#confirm-modal-overlay .modal-box').classList.remove('warning-modal-box');
+      google.script.run.withSuccessHandler(msg => {
+        hideLoading();
+        showAlert(msg, "完了", true, () => {
+          document.getElementById('reservation-form').reset();
+          showPage('home-page');
+        });
+      }).withFailureHandler(e => {
+        hideLoading();
+        showAlert(e.message, "エラー");
+      }).submitReservation(data);
+    }
+    function loadMyReservations() {
+        const list = document.getElementById('reservation-status-list');
+        list.innerHTML = "<p>読み込み中...</p>";
+        google.script.run.withSuccessHandler(reservations => {
+          if (!reservations || reservations.length === 0) { list.innerHTML = "<p>履歴なし</p>"; return; }
+          list.innerHTML = "";
+          reservations.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+          reservations.forEach(r => {
+            let actionBtns = "";
+            if (r.status === "再審中") {
+              actionBtns += `<button class="btn btn-danger" style="font-size:0.8em; padding:5px 10px;" onclick="cancelAppealMyRes('${r.reservationId}')">再審取消</button>`;
+            } else if (r.status !== "却下" && r.status !== "再審却下") {
+              actionBtns += `<button class="btn btn-danger" style="font-size:0.8em; padding:5px 10px;" onclick="cancelMyRes('${r.reservationId}')">申請取消</button>`;
+            }
+            if (r.status === "却下" && !r.hasAppealed) {
+              actionBtns += `<button class="btn" style="background-color: var(--warning); color: #fff; font-size:0.8em; padding:5px 10px; margin-left:10px;" onclick="appealMyRes('${r.reservationId}')">異議申立</button>`;
+            }
+            let commentHtml = r.adminComment ? `<p style="background:var(--bg-body); padding:8px; font-size:0.9em; border-radius:var(--radius-sm); margin-top:8px;"><strong>管理者より:</strong><br>${r.adminComment.replace(/\n/g,'<br>')}</p>` : "";
+            let statusLabel = r.status;
+            if (r.status === "再審中") statusLabel = "★再審中★";
+            list.innerHTML += `
+              <div class="glass-panel" style="padding: 16px; margin-bottom: 16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+                  <h4 style="margin:0;"><span class="badge" style="background:${getStatusColor(r.status)}; color:#fff; margin-right:8px;">${statusLabel}</span> ${r.organizationName}</h4>
+                  <span style="font-size:0.8em; color:var(--text-sub);">ID: ${r.reservationId}</span>
+                </div>
+                <p style="margin:4px 0;"><strong>${r.category}</strong> x ${r.quantity}</p>
+                <p style="margin:4px 0;"><small>${new Date(r.startTime).toLocaleString()} 〜 ${new Date(r.endTime).toLocaleString()}</small></p>
+                ${commentHtml}
+                <div style="margin-top:12px; text-align:right;">${actionBtns}</div>
+              </div>`;
+          });
+        }).getMyReservations();
+    }
+    function getStatusColor(s) {
+      if (s === '承認') return '#66bb6a'; // 少し濃い緑
+      if (s === '審査中' || s === '再審中') return '#ffa726'; // オレンジ
+      if (s === '条件付') return '#f9a825'; // ★変更: 濃い黄色（マスタード色）で見やすく
+      return '#ef5350'; // 却下・再審却下（赤）
+    }
+    function cancelMyRes(id) {
+      showConfirm("取り消し確認", "本当にこの申請を取り消しますか？<br>（この操作は元に戻せません）", () => {
+        showLoading("取り消し中...");
+        google.script.run.withSuccessHandler(m => {
+          hideLoading();
+          showAlert(m, "完了", true);
+          loadMyReservations(); // リストを更新
+        }).withFailureHandler(onFailure).cancelReservation(id);
+      }, true); // true = 赤いボタンにする
+    }
+    function appealMyRes(id) {
+      currentAppealId = id;
+      document.getElementById('appeal-reason-input').value = "";
+      document.getElementById('appeal-modal-overlay').style.display = 'flex';
+    }
+    function cancelAppealMyRes(id) {
+      showConfirm("再審取り下げ", 
+        "異議申立を取り下げますか？<br>（申請は「却下」状態に戻ります）", 
+        () => {
+          showLoading("処理中...");
+          google.script.run.withSuccessHandler(m => {
+            hideLoading();
+            showAlert(m, "完了", true);
+            loadMyReservations();
+          }).withFailureHandler(onFailure).cancelAppeal(id);
+        }, 
+        true
+      );
+    }
+    // --- MyPage Functions ---
+    function loadMyPageInfo() {
+        google.script.run.withSuccessHandler(info => {
+            currentUserInfo = info;
+            document.getElementById('mypage-name').textContent = info.name;
+            document.getElementById('mypage-email').textContent = info.email;
+            document.getElementById('mypage-dept-type').textContent = info.departmentType;
+            document.getElementById('mypage-dept-name').textContent = info.departmentName;
+        }).getCurrentUserInfoDetails();
+    }
+    function populateMyPageEditForm() {
+        if(!currentUserInfo) return;
+        const names = currentUserInfo.name.split(' ');
+        document.getElementById('edit-lastName').value = names[0] || '';
+        document.getElementById('edit-firstName').value = names.slice(1).join(' ') || '';
+        document.getElementById('edit-email').value = currentUserInfo.email;
+        document.getElementById('edit-departmentName').value = currentUserInfo.departmentName;
+        
+        if(currentUserInfo.departmentType === '学祭委員') document.getElementById('edit-type-internal').checked = true;
+        else document.getElementById('edit-type-external').checked = true;
+    }
+    function toggleEditMode(edit) {
+        document.getElementById('mypage-read-view').style.display = edit ? 'none' : 'block';
+        document.getElementById('mypage-edit-view').style.display = edit ? 'block' : 'none';
+        document.getElementById('mypage-update-btn').style.display = edit ? 'none' : 'block';
+        document.getElementById('mypage-delete-btn').style.display = edit ? 'none' : 'block';
+        document.getElementById('mypage-save-btn').style.display = edit ? 'block' : 'none';
+        document.getElementById('mypage-cancel-btn').style.display = edit ? 'block' : 'none';
+        document.getElementById('mypage-title').textContent = edit ? "会員情報変更" : "マイページ";
+    }
+    async function saveMyPageInfo() {
+      const data = {
+        lastName: document.getElementById('edit-lastName').value,
+        firstName: document.getElementById('edit-firstName').value,
+        departmentType: document.querySelector('input[name="editType"]:checked').value,
+        departmentName: document.getElementById('edit-departmentName').value
+      };
+      showLoading("更新中...");
+      try {
+        const msg = await runServer('updateCurrentUserInfo', data);
+        hideLoading();
+        showAlert(msg, "更新完了", true);
+        toggleEditMode(false);
+        loadMyPageInfo();
+      } catch (e) {
+        hideLoading();
+        showAlert("エラー: " + e.message, "エラー");
+      }
+    }
+    function confirmDeleteUser() {
+      const modal = document.getElementById('delete-modal-overlay');
+      modal.querySelector('h4').textContent = "本当に削除しますか？";
+      modal.querySelector('p').textContent = "この操作は取り消せません。";
+      const yesBtn = document.getElementById('confirm-delete-btn');
+      yesBtn.textContent = "削除実行";
+      yesBtn.onclick = async () => {
+        modal.style.display = 'none';
+        showLoading("削除中...");
+        try {
+          const msg = await runServer('deleteCurrentUser');
+          hideLoading();
+          showAlert(msg, "退会完了", true, () => {
+            window.top.location.href = appUrl;
+          });
+        } catch (e) {
+          hideLoading();
+          showAlert("エラー: " + e.message, "エラー");
+        }
+      };
+      document.getElementById('cancel-delete-btn').onclick = () => modal.style.display = 'none';
+      modal.style.display = 'flex';
+    }
+    function handleRegistration() {
+      const isInternal = document.getElementById('btn-reg-internal').classList.contains('btn-primary');
+      const data = {
+        lastName: document.getElementById('reg-lastName').value,
+        firstName: document.getElementById('reg-firstName').value,
+        authCode: document.getElementById('reg-auth-code').value,
+        departmentType: isInternal ? "学祭委員" : "外部団体",
+        departmentName: isInternal ? document.getElementById('reg-department-internal').value : document.getElementById('reg-department-external').value,
+        role: isInternal ? "利用者" : "外部利用者"
+      };
+      const confirmMsg = `氏名: ${data.lastName} ${data.firstName}<br>所属: ${data.departmentName}`;
+      
+      showConfirm("登録確認", confirmMsg, async () => {
+        showLoading("登録中...");
+        try {
+          const msg = await runServer('registerNewUser', data);
+          hideLoading();
+          showAlert(msg, "完了", true);
+          window.top.location.href = appUrl;
+        } catch (err) {
+          hideLoading();
+          showAlert("登録エラー: " + err.message, "エラー");
+        }
+      });
+    }
+    function loadUserMessages() {
+      const homeList = document.getElementById('home-inbox-list');
+      if(!homeList.innerHTML.includes('msg-item')) {
+        homeList.innerHTML = '<p style="text-align:center; color:#999; padding:10px;">更新中...</p>';
+      }
+      Promise.all([
+        new Promise(resolve => google.script.run.withSuccessHandler(resolve).withFailureHandler(() => resolve([])).getSimpleUserMessages()),
+        new Promise(resolve => google.script.run.withSuccessHandler(resolve).withFailureHandler(() => resolve([])).manageFiles('get'))
+      ]).then(([messages, files]) => {
+        allInboxData = [];
+        if (messages) {
+          messages.forEach(m => {
+            const itemType = m.type ? m.type : ((m.subject.includes('Re:') || m.subject.includes('返信')) ? '返信' : '配信');
+            allInboxData.push({
+              ...m,
+              itemType: itemType,
+              sortDate: new Date(m.date)
+            });
+          });
+        }
+        if (files) {
+          files.forEach(f => {
+            allInboxData.push({
+              id: f.id,
+              subject: f.title,
+              content: 'クリックして資料をダウンロードします',
+              date: f.date,
+              isUnread: false, 
+              itemType: '資料',
+              url: 'https://drive.google.com/file/d/' + f.fileId + '/view',
+              sortDate: new Date(f.date)
+            });
+          });
+        }
+        allInboxData.sort((a, b) => b.sortDate - a.sortDate);
+        renderInbox(allInboxData);
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+          btn.classList.remove('btn-primary');
+          btn.classList.add('btn-secondary');
+        });
+        const allBtn = document.querySelector('.filter-btn');
+        if(allBtn) {
+          allBtn.classList.remove('btn-secondary');
+          allBtn.classList.add('btn-primary');
+        }
+      });
+    }
+    function filterInbox(type, btnElement) {
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary');
+      });
+      btnElement.classList.remove('btn-secondary');
+      btnElement.classList.add('btn-primary');
+      if (type === '全て') {
+        renderInbox(allInboxData, true); 
+      } else {
+        const filtered = allInboxData.filter(item => item.itemType === type);
+        renderInbox(filtered, true);
+      }
+    }
+    function renderInbox(items, updateFullListOnly = false) {
+      const homeList = document.getElementById('home-inbox-list');
+      const fullList = document.getElementById('full-inbox-list');
+      if (!items || items.length === 0) {
+        const emptyHtml = '<p style="padding:15px; text-align:center; color:#999;">表示できる項目はありません</p>';
+        if(!updateFullListOnly && homeList) homeList.innerHTML = emptyHtml;
+        if(fullList) fullList.innerHTML = emptyHtml;
+        return;
+      }
+      const createItemHtml = (msg, isSimple) => {
+        const statusClass = msg.isUnread ? 'msg-unread' : 'msg-read';
+        const d = msg.sortDate;
+        const timeStr = isNaN(d.getHours()) ? '' : ` ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
+        const dateStr = `${d.getMonth()+1}/${d.getDate()}${msg.itemType === '資料' ? '' : timeStr}`;
+        let clickAction = '';
+        let iconHtml = '';
+        if (msg.itemType === '資料') {
+          clickAction = `window.open('${msg.url}', '_blank')`;
+          iconHtml = '<i class="fa-solid fa-file" style="color:var(--danger); margin-right:5px;"></i>';
+        } else {
+          let cleanContent = (msg.content || "").replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\n/g, '\\n').replace(/\r/g, '');
+          let cleanSubject = (msg.subject || "").replace(/"/g, '&quot;');
+          clickAction = `showMsgDetail('${cleanSubject}', '${cleanContent}')`;
+          iconHtml = msg.itemType === '返信' 
+            ? '<i class="fa-solid fa-reply" style="color:var(--primary); margin-right:5px;"></i>'
+            : '<i class="fa-solid fa-envelope" style="color:var(--primary); margin-right:5px;"></i>';
+        }
+        if (isSimple) {
+          return `
+            <div class="msg-item ${statusClass}" onclick="${clickAction}" style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="msg-subject" style="margin:0; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ${iconHtml}${msg.subject}
+              </span>
+              <span class="msg-date" style="margin-left:10px; font-size:0.8em; color:#999;">${dateStr}</span>
+            </div>
+          `;
+        } else {
+          return `
+            <div class="msg-item ${statusClass}" onclick="${clickAction}">
+              <span class="msg-date">${dateStr}</span>
+              <span class="msg-subject">${iconHtml}${msg.subject}</span>
+              <span class="msg-snippet">${msg.content}</span>
+            </div>
+          `;
+        }
+      };
+      if (!updateFullListOnly && homeList) {
+        const recent = allInboxData.slice(0, 10);
+        homeList.innerHTML = recent.map(m => createItemHtml(m, true)).join('');
+      }
+      if (fullList) {
+        fullList.innerHTML = items.map(m => createItemHtml(m, false)).join('');
+      }
+    }
+    function showMsgDetail(subject, content) {
+      showConfirm(subject, content.replace(/\n/g, '<br>'), null);
+      setTimeout(() => {
+        const cancelBtn = document.getElementById('cancel-confirm-btn');
+        if(cancelBtn) cancelBtn.style.display = 'none';
+        const okBtn = document.getElementById('confirm-action-btn');
+        const oldOnClick = okBtn.onclick;
+        okBtn.onclick = () => {
+          if(oldOnClick) oldOnClick();
+          setTimeout(() => { 
+              if(cancelBtn) cancelBtn.style.display = 'inline-block'; 
+          }, 300);
+        };
+      }, 50);
+    }
+    // オーバーレイ強制非表示タイマー
+    document.addEventListener('DOMContentLoaded', function() {
+      setTimeout(function() {
+        const overlay = document.getElementById('loading-overlay');
+        if (overlay && overlay.style.display !== 'none') {
+          console.warn("Loading overlay force hidden by timeout.");
+          overlay.style.display = 'none';
+        }
+      }, 8000); 
+    });
+  </script>
+</body>
+</html>
